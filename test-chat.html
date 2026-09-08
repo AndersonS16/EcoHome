@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Prueba Real-Time EcoHomeStore</title>
+</head>
+<body>
+  <h2>Módulo de Chat - EcoHomeStore (Prueba Socket.io)</h2>
+  
+  <div>
+    <input type="text" id="mensaje" placeholder="Escribe un mensaje de prueba..." />
+    <button onclick="enviarMensaje()">Enviar Mensaje</button>
+  </div>
+
+  <h3>Historial en tiempo real:</h3>
+  <ul id="listaMensajes"></ul>
+
+  <!-- Cliente CDN de Socket.io -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const socket = io('http://localhost:3000');
+
+    socket.on('connect', () => {
+      console.log('Conectado al servidor WebSocket:', socket.id);
+    });
+
+    // Escuchar el evento broadcast emitido por el servidor
+    socket.on('receive-message', (data) => {
+      const li = document.createElement('li');
+      li.textContent = data;
+      document.getElementById('listaMensajes').appendChild(li);
+    });
+
+    function enviarMensaje() {
+      const input = document.getElementById('mensaje');
+      if (input.value.trim() !== '') {
+        socket.emit('new-message', input.value);
+        input.value = '';
+      }
+    }
+  </script>
+</body>
+</html>
