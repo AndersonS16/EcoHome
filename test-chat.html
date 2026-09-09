@@ -2,32 +2,42 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Prueba Real-Time EcoHomeStore</title>
+  <title>Prueba Chat Autenticado - EcoHomeStore</title>
 </head>
 <body>
-  <h2>Módulo de Chat - EcoHomeStore (Prueba Socket.io)</h2>
+  <h2>Chat EcoHomeStore (Prueba JWT + Persistencia)</h2>
   
   <div>
-    <input type="text" id="mensaje" placeholder="Escribe un mensaje de prueba..." />
+    <input type="text" id="mensaje" placeholder="Escribe un mensaje..." />
     <button onclick="enviarMensaje()">Enviar Mensaje</button>
   </div>
 
-  <h3>Historial en tiempo real:</h3>
+  <h3>Historial de Mensajes:</h3>
   <ul id="listaMensajes"></ul>
 
-  <!-- Cliente CDN de Socket.io -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
-    const socket = io('http://localhost:3000');
+    
+    // TOKEN JWT OBTENIDO
+    const tokenJWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJBbmRlcnNvbiJ9.h_Yhy_p0k8tnP551l_BcsgmhZT1gjRpAUKvkOXdPFM0";
 
-    socket.on('connect', () => {
-      console.log('Conectado al servidor WebSocket:', socket.id);
+    // Conexión autenticada enviando el token en el handshake
+    const socket = io('http://localhost:3000', {
+      auth: { token: tokenJWT }
     });
 
-    // Escuchar el evento broadcast emitido por el servidor
+    socket.on('connect', () => {
+      console.log('Conectado exitosamente con ID:', socket.id);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('Error de autenticación:', err.message);
+    });
+
+    // Escuchar el mensaje devuelto desde PostgreSQL
     socket.on('receive-message', (data) => {
       const li = document.createElement('li');
-      li.textContent = data;
+      li.innerHTML = `<strong>${data.username}:</strong> ${data.text} <small>(${new Date(data.created_at).toLocaleTimeString()})</small>`;
       document.getElementById('listaMensajes').appendChild(li);
     });
 
