@@ -12,13 +12,15 @@ import pool from './config/db.js';
 import productRoutes from './routes/product.routes.js';
 import authRoutes from './routes/auth.routes.js';
 
-app.get('/', (req, res) => {
-  res.send('API de EcoHomeStore corriendo correctamente en Render');
-});
-
+// Crear la instancia de Express
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Ruta raíz de prueba
+app.get('/', (req, res) => {
+  res.send('API de EcoHomeStore corriendo correctamente en Render');
+});
 
 // 2. REGISTRAR RUTAS
 app.use('/auth', authRoutes);
