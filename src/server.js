@@ -12,6 +12,10 @@ import pool from './config/db.js';
 import productRoutes from './routes/product.routes.js';
 import authRoutes from './routes/auth.routes.js';
 
+app.get('/', (req, res) => {
+  res.send('API de EcoHomeStore corriendo correctamente en Render');
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json());
