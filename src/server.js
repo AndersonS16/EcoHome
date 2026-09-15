@@ -12,17 +12,17 @@ import pool from './config/db.js';
 import productRoutes from './routes/product.routes.js';
 import authRoutes from './routes/auth.routes.js';
 
-// Crear la instancia de Express
+// 2. INICIALIZAR EXPRESS (¡DEBE IR ANTES DE CUALQUIER app.get O app.use!)
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ruta raíz de prueba
+// 3. RUTA RAÍZ DE PRUEBA
 app.get('/', (req, res) => {
   res.send('API de EcoHomeStore corriendo correctamente en Render');
 });
 
-// 2. REGISTRAR RUTAS
+// 4. REGISTRAR RUTAS
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
 
@@ -101,6 +101,7 @@ io.on('connection', async (socket) => {
     }
   });
 
+  // EVENTO DE DESCONECTAR
   socket.on('disconnect', () => {
     console.log(`[Socket.io] Usuario ${socket.user.username} desconectado`);
   });
