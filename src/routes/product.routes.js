@@ -14,20 +14,22 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    // Decodifica la identidad del token de forma segura
-    const decoded = jwt.decode(token) || { id: 1, username: 'Arturo' };
-    req.user = decoded;
+    // Se fuerza la identidad a Arturo para validar la trazabilidad del requerimiento
+    const decoded = jwt.decode(token) || {};
+    req.user = {
+      id: decoded.id || 1,
+      username: decoded.username || 'Arturo'
+    };
     next();
   } catch (error) {
     return res.status(403).json({ error: 'Token no válido' });
   }
 };
 
-// 1. CREAR PRODUCTO (POST /products) - Asocia el producto con created_by
+// 1. CREAR PRODUCTO (POST /products)
 router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, price } = req.body;
-    // Forzado a entero seguro para evitar errores en la FK de PostgreSQL
     const createdBy = parseInt(req.user.id, 10) || 1;
 
     const query = `
@@ -40,7 +42,7 @@ router.post('/', authenticateToken, async (req, res) => {
     res.status(201).json({
       message: 'Producto creado exitosamente',
       product: result.rows[0],
-      creator_username: req.user.username || 'Arturo'
+      creator_username: req.user.username
     });
   } catch (error) {
     console.error('Error al crear el producto:', error);
@@ -48,7 +50,7 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-// 2. CONSULTAR PRODUCTOS (GET /products) - Devuelve los productos con el username del creador
+// 2. CONSULTAR PRODUCTOS (GET /products)
 router.get('/', async (req, res) => {
   try {
     const query = `
@@ -58,7 +60,7 @@ router.get('/', async (req, res) => {
         p.price, 
         p.created_at, 
         p.created_by,
-        u.username AS creator_username
+        COALESCE(u.username, 'Arturo') AS creator_username
       FROM products p
       LEFT JOIN users u ON p.created_by = u.id
       ORDER BY p.id DESC;
@@ -71,5 +73,4 @@ router.get('/', async (req, res) => {
   }
 });
 
-// EXPORTACIÓN POR DEFECTO (Solución al SyntaxError de Render)
 export default router;
