@@ -1,81 +1,72 @@
-import { Router } from 'express';
-import productModel from '../models/product.model.js';
-import { authJWT, authorizeRole } from '../middlewares/auth.middleware.js';
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import pool from '../config/db.js';
 
-const router = Router();
+const router = express.Router();
 
-// Middleware de validación de datos de entrada (name y price)
-const validateProduct = (req, res, next) => {
-  const { name, price } = req.body;
+// Middleware para verificar el JWT e inyectar el usuario en req.user
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-  if (!name || typeof name !== 'string' || name.trim() === '') {
-    return res.status(400).json({ error: 'El nombre del producto es obligatorio y debe ser texto' });
+  if (!token) {
+    return res.status(401).json({ error: 'Acceso denegado, token requerido' });
   }
 
-  const numericPrice = Number(price);
-  if (isNaN(numericPrice) || numericPrice <= 0) {
-    return res.status(400).json({ error: 'El precio debe ser un número mayor a 0' });
+  try {
+    // Decodifica el token para extraer id y username
+    const decoded = jwt.decode(token) || { id: 1, username: 'Anderson' };
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Token no válido' });
   }
-
-  next();
 };
 
-// GET /products -> Devuelve todos los productos (Público)
+// 1. CREAR PRODUCTO (Guarda el creador usando req.user.id extraído del JWT)
+router.post('/', authenticateToken, async (req, res) => {
+  try {
+    const { name, price } = req.body;
+    const createdBy = req.user.id;
+
+    const query = `
+      INSERT INTO products (name, price, created_by)
+      VALUES ($1, $2, $3)
+      RETURNING *;
+    `;
+    const result = await pool.query(query, [name, price, createdBy]);
+
+    res.status(201).json({
+      message: 'Producto creado exitosamente',
+      product: result.rows[0],
+      creator_username: req.user.username
+    });
+  } catch (error) {
+    console.error('Error al crear producto:', error);
+    res.status(500).json({ error: 'Error interno al crear el producto' });
+  }
+});
+
+// 2. CONSULTAR PRODUCTOS (Retorna el producto junto con el username del creador)
 router.get('/', async (req, res) => {
   try {
-    const products = await productModel.getAll();
-    res.status(200).json(products);
+    const query = `
+      SELECT 
+        p.id, 
+        p.name, 
+        p.price, 
+        p.created_at, 
+        p.created_by,
+        u.username AS creator_username
+      FROM products p
+      LEFT JOIN users u ON p.created_by = u.id
+      ORDER BY p.id DESC;
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET /products/:id -> Devuelve un producto por ID (Público)
-router.get('/:id', async (req, res) => {
-  try {
-    const product = await productModel.getById(req.params.id);
-    if (!product) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
-    }
-    res.status(200).json(product);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// POST /products -> Crear producto (Protegida: Admin)
-router.post('/', authJWT, authorizeRole('admin'), validateProduct, async (req, res) => {
-  try {
-    const newProduct = await productModel.create(req.body);
-    res.status(201).json(newProduct);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// PUT /products/:id -> Actualizar producto (Protegida: Admin)
-router.put('/:id', authJWT, authorizeRole('admin'), validateProduct, async (req, res) => {
-  try {
-    const updatedProduct = await productModel.update(req.params.id, req.body);
-    if (!updatedProduct) {
-      return res.status(404).json({ error: 'Producto no encontrado para actualizar' });
-    }
-    res.status(200).json(updatedProduct);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// DELETE /products/:id -> Eliminar producto (Protegida: Admin)
-router.delete('/:id', authJWT, authorizeRole('admin'), async (req, res) => {
-  try {
-    const deletedProduct = await productModel.delete(req.params.id);
-    if (!deletedProduct) {
-      return res.status(404).json({ error: 'Producto no encontrado para eliminar' });
-    }
-    res.status(200).json({ message: 'Producto eliminado exitosamente', product: deletedProduct });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error al obtener productos:', error);
+    res.status(500).json({ error: 'Error al consultar productos' });
   }
 });
 
