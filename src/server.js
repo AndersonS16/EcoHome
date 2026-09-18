@@ -11,6 +11,7 @@ import pool from './config/db.js';
 // 1. IMPORTAR RUTAS
 import productRoutes from './routes/product.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js'; // 1. Importar las rutas de usuario
 
 // 2. INICIALIZAR EXPRESS (¡DEBE IR ANTES DE CUALQUIER app.get O app.use!)
 const app = express();
@@ -25,6 +26,9 @@ app.get('/', (req, res) => {
 // 4. REGISTRAR RUTAS
 app.use('/auth', authRoutes);
 app.use('/products', productRoutes);
+app.use('/users', userRoutes); // 2. Vincular el endpoint /users
+
+export default app;
 
 const server = createServer(app);
 const io = new Server(server, {
