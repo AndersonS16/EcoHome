@@ -32,11 +32,8 @@ io.use((socket, next) => {
 });
 
 io.on('connection', async (socket) => {
-  const username = socket.handshake.query.username || 'Arturo';
-
+  // Cargar el historial con JOIN para enviar los últimos 10 al conectar
   try {
-    // Carga de los últimos 10 mensajes al conectar
-    // Carga de los últimos 10 mensajes al conectar
     const historyQuery = `
       SELECT m.id, u.username, m.text, m.created_at
       FROM messages m
@@ -46,20 +43,36 @@ io.on('connection', async (socket) => {
     const historyRes = await pool.query(historyQuery);
     socket.emit('messages', historyRes.rows.reverse());
   } catch (err) {
-    console.error('Error al cargar historial de chat:', err);
+    console.error('Error al cargar historial:', err);
   }
 
-  // Recepción e inserción de nuevos mensajes
+  // Escuchar 'new-message' y guardar en Postgres asociando user_id
   socket.on('new-message', async (data) => {
     try {
+      const { username, text } = data;
+      
+      // 1. Obtener el id del usuario por su username
+      const userRes = await pool.query('SELECT id FROM users WHERE username = $1', [username || 'AndersonPrueba']);
+      const userId = userRes.rows.length > 0 ? userRes.rows[0].id : 1;
+
+      // 2. Insertar mensaje con user_id
       const insertQuery = `
-        INSERT INTO messages (username, text) 
-        VALUES ($1, $2) RETURNING id, username, text, created_at;
+        INSERT INTO messages (user_id, text) 
+        VALUES ($1, $2) RETURNING id, text, created_at;
       `;
-      const newMsgRes = await pool.query(insertQuery, [data.user || username, data.text]);
-      io.emit('new-message', newMsgRes.rows[0]);
+      const insertRes = await pool.query(insertQuery, [userId, text]);
+
+      const newMessage = {
+        id: insertRes.rows[0].id,
+        username: username || 'AndersonPrueba',
+        text: text,
+        created_at: insertRes.rows[0].created_at
+      };
+
+      // 3. Emitir a todos en tiempo real
+      io.emit('new-message', newMessage);
     } catch (err) {
-      console.error('Error al guardar mensaje:', err);
+      console.error('Error al guardar mensaje en Postgres:', err);
     }
   });
 });
