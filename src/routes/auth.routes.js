@@ -1,73 +1,43 @@
-import { Router } from 'express';
+import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import userModel from '../models/user.model.js';
+import pool from '../config/db.js';
 
-const router = Router();
+const router = express.Router();
+const SECRET_KEY = process.env.JWT_SECRET || 'clave_secreta_super_segura_ecohome';
 
-// POST /auth/signup (Registro sin contraseñas en texto plano)
+// POST /auth/signup
 router.post('/signup', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Campos requeridos' });
+
   try {
-    const { username, email, password, role } = req.body;
-
-    if (!username || !email || !password) {
-      return res.status(400).json({ error: 'Todos los campos son obligatorios' });
-    }
-
-    // Encriptar contraseña
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
-
-    const newUser = await userModel.create({
-      username,
-      email,
-      password_hash,
-      role: role || 'cliente'
-    });
-
-    res.status(201).json({
-      message: 'Usuario registrado exitosamente',
-      user: newUser
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username',
+      [username, hashedPassword]
+    );
+    res.status(201).json({ message: 'Usuario registrado', user: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'El usuario ya existe o error en servidor' });
   }
 });
 
-// POST /auth/login (Valida credenciales y devuelve JWT)
+// POST /auth/login
 router.post('/login', async (req, res) => {
+  const { username, password } = req.body;
   try {
-    const { email, password } = req.body;
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Credenciales inválidas' });
 
-    const user = await userModel.findByEmail(email);
-    if (!user) {
-      return res.status(400).json({ error: 'Credenciales inválidas' });
-    }
+    const user = result.rows[0];
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) return res.status(401).json({ error: 'Credenciales inválidas' });
 
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) {
-      return res.status(400).json({ error: 'Credenciales inválidas' });
-    }
-
-    // Generar JWT
-    const payload = {
-      id: user.id,
-      username: user.username,
-      role: user.role
-    };
-
-    const token = jwt.sign(
-      payload, 
-      process.env.JWT_SECRET || 'clave_secreta_super_segura_ecohome', 
-      { expiresIn: '2h' }
-    );
-
-    res.json({
-      message: 'Login exitoso',
-      token
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY, { expiresIn: '24h' });
+    res.json({ token, username: user.username, id: user.id });
+  } catch (err) {
+    res.status(500).json({ error: 'Error en el servidor' });
   }
 });
 

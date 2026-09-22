@@ -8,6 +8,11 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Inserción de usuario inicial 'Arturo' (Clave cifrada bcrypt)
+INSERT INTO users (username, password_hash) 
+VALUES ('Arturo', '$2a$10$wT8KzTqP4V1k/Yv/k7yL7eM4XJ.2Bq9W4pC106/k.V2X8Z9Y0W1u2')
+ON CONFLICT (username) DO NOTHING;
+
 -- Crear tabla de productos
 CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,
