@@ -36,10 +36,12 @@ io.on('connection', async (socket) => {
 
   try {
     // Carga de los últimos 10 mensajes al conectar
+    // Carga de los últimos 10 mensajes al conectar
     const historyQuery = `
-      SELECT id, username, text, created_at 
-      FROM messages 
-      ORDER BY id DESC LIMIT 10;
+      SELECT m.id, u.username, m.text, m.created_at
+      FROM messages m
+      JOIN users u ON m.user_id = u.id
+      ORDER BY m.id DESC LIMIT 10;
     `;
     const historyRes = await pool.query(historyQuery);
     socket.emit('messages', historyRes.rows.reverse());
