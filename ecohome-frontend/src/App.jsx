@@ -1,86 +1,70 @@
 import React, { useState, useEffect } from 'react';
-
-const API_URL = 'https://ecohome-u5bx.onrender.com';
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwidXNlcm5hbWUiOiJBcnR1cm8ifQ.signature";
+import Login from './components/Login';
+import Header from './components/Header';
+import Products from './components/Products';
+import Chat from './components/Chat';
+import API from './api';
 
 export default function App() {
-  const [products, setProducts] = useState([]);
-  const [userDisplayName, setUserDisplayName] = useState("Arturo (6)");
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
+  const [user, setUser] = useState(null);
+  const [statsCount, setStatsCount] = useState(0);
 
-  const fetchDashboardData = async () => {
+  // Obtener estadísticas del usuario
+  const fetchStats = async () => {
     try {
-      const resProd = await fetch(`${API_URL}/products`);
-      const resStats = await fetch(`${API_URL}/users/stats`, {
-        headers: { Authorization: `Bearer ${TOKEN}` }
-      });
-
-      if (resProd.ok && resStats.ok) {
-        const dataProd = await resProd.json();
-        const dataStats = await resStats.json();
-        setProducts(dataProd);
-        setUserDisplayName(dataStats.display_name || `${dataStats.username} (${dataStats.total_products})`);
+      const { data } = await API.get('/users/stats');
+      // Si la API retorna count, lo asignamos; de lo contrario mantenemos el valor actual
+      if (data && typeof data.count === 'number') {
+        setStatsCount(data.count);
       }
     } catch (err) {
-      console.error("Error cargando dashboard:", err);
+      console.error('Error al cargar stats:', err);
     }
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+      fetchStats();
+    }
   }, []);
 
-  const handleCreateProduct = async (e) => {
-    e.preventDefault();
-    if (!name || !price) return;
-
-    await fetch(`${API_URL}/products`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${TOKEN}`
-      },
-      body: JSON.stringify({ name, price: parseFloat(price) })
-    });
-
-    setName('');
-    setPrice('');
-    fetchDashboardData();
+  const handleLoginSuccess = (data) => {
+    setUser({ username: data.username, id: data.id });
+    fetchStats();
   };
 
+  const handleLogout = () => {
+    localStorage.clear();
+    setUser(null);
+  };
+
+  // Función que incrementa el contador al crear un producto
+  const handleProductCreated = () => {
+    setStatsCount((prevCount) => prevCount + 1); // Incremento directo en pantalla
+    fetchStats(); // Sincronización con el servidor
+  };
+
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-        <h2 style={{ color: '#2e7d32' }}>EcoHomeStore - Panel Web React</h2>
-        <div style={{ background: '#2e7d32', color: 'white', padding: '8px 16px', borderRadius: '20px', fontWeight: 'bold' }}>
-          {userDisplayName}
+    <div className="min-h-screen bg-gray-50">
+      <Header user={user} statsCount={statsCount} onLogout={handleLogout} />
+      
+      <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">📦 Catálogo de Productos</h2>
+          <Products onProductCreated={handleProductCreated} />
         </div>
-      </header>
-
-      <div style={{ margin: '20px 0' }}>
-        <h3>Agregar Nuevo Producto</h3>
-        <form onSubmit={handleCreateProduct} style={{ display: 'flex', gap: '10px' }}>
-          <input placeholder="Nombre del producto" value={name} onChange={(e) => setName(e.target.value)} style={{ padding: '8px', width: '250px' }} />
-          <input placeholder="Precio" type="number" value={price} onChange={(e) => setPrice(e.target.value)} style={{ padding: '8px', width: '120px' }} />
-          <button type="submit" style={{ padding: '8px 16px', background: '#2e7d32', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-            Crear Producto
-          </button>
-        </form>
-      </div>
-
-      <h3>Catálogo de Productos</h3>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {products.map((p) => (
-          <li key={p.id} style={{ padding: '12px', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between' }}>
-            <div>
-              <strong>{p.name}</strong>
-              <div style={{ fontSize: '13px', color: '#666' }}>Creador: {p.creator_username || 'Arturo'}</div>
-            </div>
-            <div style={{ fontWeight: 'bold', color: '#2e7d32' }}>${p.price}</div>
-          </li>
-        ))}
-      </ul>
+        
+        <div>
+          <h2 className="text-lg font-bold text-gray-800 mb-4">💬 Chat Persistente</h2>
+          <Chat />
+        </div>
+      </main>
     </div>
   );
 }
