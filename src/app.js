@@ -12,6 +12,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+const SECRET_KEY = process.env.JWT_SECRET || 'clave_secreta_super_segura_ecohome';
+
 app.use(cors());
 app.use(express.json());
 
@@ -24,55 +26,62 @@ app.get('/', (req, res) => {
   res.send('API de EcoHomeStore corriendo correctamente en Render 🚀');
 });
 
-// Lógica de Socket.IO con Persistencia y Límite de 10 Mensajes
+// Middleware de Socket.IO para autenticación JWT
 io.use((socket, next) => {
-  const token = socket.handshake.auth?.token || socket.handshake.query?.username;
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
   if (!token) return next(new Error('Autenticación requerida'));
-  next();
+
+  jwt.verify(token, SECRET_KEY, (err, decoded) => {
+    if (err) return next(new Error('Token inválido'));
+    socket.user = decoded; // Adjunta { id, username } al socket
+    next();
+  });
 });
 
+// Lógica de Socket.IO con Persistencia en PostgreSQL
 io.on('connection', async (socket) => {
-  // Cargar el historial con JOIN para enviar los últimos 10 al conectar
+  console.log('Cliente conectado via Socket.IO:', socket.id);
+
+  // 1. Cargar los últimos 10 mensajes al conectar
   try {
     const historyQuery = `
-      SELECT m.id, u.username, m.text, m.created_at
+      SELECT m.id, COALESCE(u.username, 'Anónimo') AS username, m.text, m.created_at
       FROM messages m
-      JOIN users u ON m.user_id = u.id
+      LEFT JOIN users u ON m.user_id = u.id
       ORDER BY m.id DESC LIMIT 10;
     `;
     const historyRes = await pool.query(historyQuery);
     socket.emit('messages', historyRes.rows.reverse());
   } catch (err) {
-    console.error('Error al cargar historial:', err);
+    console.error('Error al cargar historial:', err.message);
   }
 
-  // Escuchar 'new-message' y guardar en Postgres asociando user_id
+  // 2. Escuchar 'new-message' y guardar en PostgreSQL
   socket.on('new-message', async (data) => {
     try {
-      const { username, text } = data;
-      
-      // 1. Obtener el id del usuario por su username
-      const userRes = await pool.query('SELECT id FROM users WHERE username = $1', [username || 'AndersonPrueba']);
-      const userId = userRes.rows.length > 0 ? userRes.rows[0].id : 1;
+      const { text } = data;
+      if (!text) return;
 
-      // 2. Insertar mensaje con user_id
+      const userId = socket.user ? socket.user.id : 1;
+      const username = socket.user ? socket.user.username : 'AndersonPrueba';
+
       const insertQuery = `
-        INSERT INTO messages (user_id, text) 
+        INSERT INTO messages (user_id, text)
         VALUES ($1, $2) RETURNING id, text, created_at;
       `;
       const insertRes = await pool.query(insertQuery, [userId, text]);
 
-      const newMessage = {
+      const savedMsg = {
         id: insertRes.rows[0].id,
-        username: username || 'AndersonPrueba',
-        text: text,
+        username: username,
+        text: insertRes.rows[0].text,
         created_at: insertRes.rows[0].created_at
       };
 
-      // 3. Emitir a todos en tiempo real
-      io.emit('new-message', newMessage);
+      // Transmitir a todos los clientes conectados
+      io.emit('new-message', savedMsg);
     } catch (err) {
-      console.error('Error al guardar mensaje en Postgres:', err);
+      console.error('Error al insertar mensaje:', err.message);
     }
   });
 });
