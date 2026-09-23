@@ -38,11 +38,10 @@ io.use((socket, next) => {
   });
 });
 
-// Lógica de Socket.IO con Persistencia en PostgreSQL
 io.on('connection', async (socket) => {
   console.log('Cliente conectado via Socket.IO:', socket.id);
 
-  // 1. Cargar los últimos 10 mensajes al conectar
+  // 1. Enviar los últimos 10 mensajes al conectar
   try {
     const historyQuery = `
       SELECT m.id, COALESCE(u.username, 'Anónimo') AS username, m.text, m.created_at
@@ -51,25 +50,24 @@ io.on('connection', async (socket) => {
       ORDER BY m.id DESC LIMIT 10;
     `;
     const historyRes = await pool.query(historyQuery);
+    // Invertir para orden cronológico y emitir evento "messages"
     socket.emit('messages', historyRes.rows.reverse());
   } catch (err) {
     console.error('Error al cargar historial:', err.message);
   }
 
-  // 2. Escuchar 'new-message' y guardar en PostgreSQL
+  // 2. Escuchar 'new-message', guardar en Postgres y hacer BROADCAST a todos
   socket.on('new-message', async (data) => {
     try {
-      const { text } = data;
-      if (!text) return;
-
-      const userId = socket.user ? socket.user.id : 1;
+      const textMessage = typeof data === 'string' ? data : (data.text || data.message || 'Mensaje de prueba');
+      const userId = socket.user ? socket.user.id : 4;
       const username = socket.user ? socket.user.username : 'AndersonPrueba';
 
       const insertQuery = `
         INSERT INTO messages (user_id, text)
         VALUES ($1, $2) RETURNING id, text, created_at;
       `;
-      const insertRes = await pool.query(insertQuery, [userId, text]);
+      const insertRes = await pool.query(insertQuery, [userId, textMessage]);
 
       const savedMsg = {
         id: insertRes.rows[0].id,
@@ -78,7 +76,7 @@ io.on('connection', async (socket) => {
         created_at: insertRes.rows[0].created_at
       };
 
-      // Transmitir a todos los clientes conectados
+      // BROADCAST a absolutamente todos los clientes conectados
       io.emit('new-message', savedMsg);
     } catch (err) {
       console.error('Error al insertar mensaje:', err.message);
